@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MuteFree</title>
+<link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+<main>
+  <div id="errBanner" class="errbanner" hidden></div>
+  <header><h1>MuteFree</h1><span class="tag">M6 · polished</span></header>
+  <section class="stage">
+    <video id="video" playsinline muted></video>
+    <canvas id="overlay"></canvas>
+    <div id="status" class="status">Camera is off.</div>
+  </section>
+  <section class="controls">
+    <button id="start">Start camera</button>
+    <label><input type="checkbox" id="showLandmarks" checked /> Show landmarks</label>
+  </section>
+  <section class="stats" id="stats">
+    <div><b id="fps">–</b><span>fps</span></div>
+    <div><b id="infer">–</b><span>ms / frame</span></div>
+    <div><b id="face">–</b><span>face</span></div>
+    <div><b id="delegate">–</b><span>backend</span></div>
+    <div><b id="vocabN">0</b><span>vocab words</span></div>
+  </section>
+  <section class="panel">
+    <h2>Speech activity <span id="badge" class="badge">IDLE</span></h2>
+    <div class="grid2">
+      <label>Start × baseline <input type="range" id="startMult" min="1.5" max="12" step="0.5" value="4" /><b id="startMultV"></b></label>
+      <label>Stop × baseline <input type="range" id="stopMult" min="1" max="8" step="0.5" value="2" /><b id="stopMultV"></b></label>
+      <label>Min start level <input type="range" id="absMin" min="0.02" max="1" step="0.01" value="0.15" /><b id="absMinV"></b></label>
+      <div class="thr" id="thr"></div>
+    </div>
+    <div class="row"><button id="runTest">Run M2 test (about 90 s)</button><button id="dl" disabled>Download results (JSON)</button></div>
+    <pre id="testOut">Start the camera first, then run the test.</pre>
+  </section>
+  <section class="panel" id="rgPanel">
+    <h2>Recognition</h2>
+    <div id="rgWord" class="bigword">–</div>
+    <progress id="rgConf" max="1" value="0"></progress>
+    <div class="mut">confidence margin: <b id="rgConfV">–</b> <span id="rgClosest"></span></div>
+    <div class="grid2">
+      <label>Speak only if confidence ≥ <input type="range" id="rgThr" min="0" max="0.8" step="0.01" value="0.15" /><b id="rgThrV"></b></label>
+      <label>Word-end delay <input type="range" id="rgStop" min="150" max="600" step="25" value="350" /><b id="rgStopV"></b></label>
+    </div>
+    <div class="row"><label>Mode <select id="rgMode"><option value="word">Word by word (legacy)</option><option value="sentence">Sentence: speak after a pause</option></select></label></div>
+    <div id="sentBox" class="sentbox" hidden>
+      <div class="srow"><span>Recognized</span><b id="sentRecognized">–</b></div>
+      <div class="srow"><span>Uncertain</span><b id="sentUncertain">–</b></div>
+      <div class="srow"><span>AI suggestion</span><b id="sentSuggest">–</b></div>
+      <div class="srow"><span>Sentence so far</span><b id="sentCurrent">–</b></div>
+      <div class="srow"><span>Final</span><b id="sentFinal">–</b></div>
+      <div class="srow"><span>Status</span><b id="sentStatus">idle</b></div>
+      <div class="grid2"><label>Sentence timeout (pause that ends a sentence) <input type="range" id="sentTimeout" min="600" max="3500" step="100" value="1500" /><b id="sentTimeoutV"></b></label></div>
+      <details class="simbox" open>
+        <summary>Try it without the camera (typed input, not lip reading)</summary>
+        <p class="mut">Type words. Write <b>water/waiter/later</b> for an unclear word with those candidates, or <b>?</b> for a movement that matched nothing. Example: <i>I want water/waiter/later please</i></p>
+        <div class="row"><input id="simText" value="I need help/held/hell please" size="34" /><button id="simRun" class="sm">Run it</button></div>
+      </details>
+      <div class="smartbox">
+        <div class="row">
+          <label><input type="checkbox" id="smartOn" /> Smart completion</label>
+          <label>Engine <select id="smartEngine"><option value="ngram">Built-in phrase model (no download)</option><option value="ollama">Local Ollama server</option><option value="webllm">In-browser LLM (Qwen2.5-0.5B)</option></select></label>
+          <label id="ollamaModelBox" hidden>Model <select id="ollamaModel"></select></label>
+          <button id="smartLoad" class="sm" hidden>Download and load model</button>
+        </div>
+        <progress id="smartBar" max="1" value="0" hidden></progress>
+        <div id="smartStat" class="mut"></div>
+        <details><summary class="mut">Advanced and privacy</summary>
+          <div class="row"><label>Ollama URL <input id="ollamaUrl" value="http://localhost:11434" size="26" /></label></div>
+          <div id="ollamaWarn" class="warn" hidden>This URL is not on this computer: the sentence text and candidate words would be sent to another host.</div>
+          <div class="grid2"><label>Fill a gap only if combined confidence ≥ <input type="range" id="smartAccept" min="0.5" max="0.95" step="0.01" value="0.6" /><b id="smartAcceptV"></b></label></div>
+          <p class="mut">It only chooses between words the camera itself considered, and never changes a word the camera was sure of. Filled words are shown in [brackets?]. Video never leaves your device. The in-browser LLM downloads its model files once from huggingface.co (about 945 MB of GPU memory when running; WebGPU required); no speech, video or text of yours is sent anywhere. The Ollama engine sends the sentence with one gap, the candidate words and up to two earlier sentences to the Ollama URL above (default: this computer), never video or mouth data.</p>
+        </details>
+      </div>
+      <div class="row"><button id="sentStop" class="sm">Stop speaking</button><button id="sentClear" class="sm">Clear context</button></div>
+    </div>
+    <div class="row">
+      <label><input type="checkbox" id="rgMute" /> Mute voice</label>
+      <label><input type="checkbox" id="rgExpr" checked /> Expressive mode</label>
+      <button id="neutralBtn" class="sm">Set neutral face (1.5 s)</button>
+      <button id="rgTest" class="sm">Test: say "hello" with my face now</button>
+    </div>
+    <div class="row"><label>Voice <select id="rgVoice"></select></label></div>
+    <div id="rgVoiceStat" class="mut"></div>
+    <div class="meters">
+      <div class="m"><span>smile</span><div class="bar"><i id="mSmile"></i></div><b id="vSmile"></b></div>
+      <div class="m"><span>brow</span><div class="bar bi"><i id="mBrow"></i></div><b id="vBrow"></b></div>
+      <div class="m"><span>intensity</span><div class="bar"><i id="mJaw"></i></div><b id="vJaw"></b></div>
+      <div class="mut" id="voiceNow"></div>
+    </div>
+    <div class="grid2"><label>Intensity gain <input type="range" id="rgGain" min="1" max="5" step="0.25" value="2" /><b id="rgGainV"></b></label></div>
+    <div id="rgNote" class="warn"></div>
+    <div id="rgWhy" class="warn">Waiting for a mouthed word… (if nothing appears when you move your lips, the lip-activity detector is not triggering: see the MOUTHING badge)</div>
+    <div id="rgLat" class="mut"></div>
+    <ul id="rgHist" class="hist"></ul>
+  </section>
+  <section class="panel" id="evPanel">
+    <h2>Accuracy test <small>(cued words, nothing is spoken)</small></h2>
+    <div class="row"><label>Words <input type="number" id="evN" value="100" min="8" max="300" style="width:80px" /></label>
+      <button id="evStart">Start test</button><button id="evStop" class="sm" disabled>Stop</button>
+      <button id="evCsv" class="sm" disabled>CSV</button><button id="evJson" class="sm" disabled>JSON</button></div>
+    <div id="evWord" class="bigword">–</div>
+    <progress id="evProg" max="1" value="0"></progress>
+    <pre id="evOut">Calibrate, start the camera, then run the test: the app names a word, you mouth it, and it records what the recognizer decided. At least 100 words gives a usable estimate.</pre>
+  </section>
+  <section class="panel" id="calPanel">
+    <h2>Calibration <span id="calState" class="badge">not calibrated</span></h2>
+    <div id="calHome">
+      <p id="calStatus" class="mut"></p>
+      <div id="vocabList" class="chips"></div>
+      <div class="row">
+        <input id="calWord" placeholder="add a word" maxlength="24" />
+        <button id="calAdd" class="sm">Add</button>
+        <button id="calReset" class="sm">Reset to default</button>
+      </div>
+      <div id="ambig" class="mut"></div>
+      <div class="row"><button id="calQuick">Quick start (8 words × 3, about 1 min)</button><button id="calStart" class="sm">Full calibration</button><button id="calDel" class="danger">Delete my data</button></div>
+    </div>
+    <div id="calCheck" hidden>
+      <p>Before recording, make sure the camera can see you well.</p>
+      <ul id="checks" class="checks"></ul>
+      <div class="row"><button id="calBegin">Begin recording</button><button id="calBack" class="sm">Back</button></div>
+    </div>
+    <div id="calRec" hidden>
+      <div id="recWord" class="bigword"></div>
+      <div id="recCode" class="mut"></div>
+      <button id="recHold" class="hold">Hold here (or hold SPACE) while mouthing</button>
+      <div class="mut center">or just mouth the word and pause — the app also detects it automatically</div>
+      <progress id="recBar" max="1" value="0"></progress>
+      <div id="recInfo"></div>
+      <div id="recAct" class="mut"></div>
+      <div class="row"><button id="recSens" class="sm">Make detection more sensitive</button><button id="recUndo" class="sm">Undo last</button><button id="recCancel" class="sm">Cancel</button></div>
+    </div>
+    <div id="calTrain" hidden><p>Training in your browser…</p><progress id="trainBar" max="1" value="0"></progress></div>
+    <div id="calRes" hidden>
+      <p id="resSummary"></p>
+      <div id="matrix" class="scroll"></div>
+      <div id="topConf"></div>
+      <h2>Per-word accuracy</h2>
+      <div id="wordRows"></div>
+      <div class="row"><button id="resDone">Done</button></div>
+    </div>
+  </section>
+  <section class="panel limits">
+    <h2>Known limits</h2>
+    <ul>
+      <li><b>Lips alone are ambiguous.</b> Many sounds look identical (p/b/m, t/d/n). This is why the vocabulary is small and fixed.</li>
+      <li><b>Speaker-dependent.</b> It only works after you calibrate it on your own lips; another person will get poor results.</li>
+      <li><b>Lighting and angle matter.</b> Use even light and a centered, front-facing camera.</li>
+      <li><b>Never guesses.</b> A low-confidence or unfamiliar movement shows "?" and says nothing.</li>
+      <li><b>Private.</b> Video stays in your browser; calibration is stored locally and can be deleted.</li>
+    </ul>
+  </section>
+  <section>
+    <h2>Live mouth features <small>(pose-normalized, units = inter-eye distance)</small></h2>
+    <canvas id="graph" height="180"></canvas>
+    <div class="legend"><i class="c1"></i>lip width <i class="c2"></i>inner aperture <i class="c3"></i>motion energy</div>
+  </section>
+</main>
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>
